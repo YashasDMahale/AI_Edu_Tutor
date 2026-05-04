@@ -1,14 +1,16 @@
 import os
-from google import genai
+from groq import Groq
 
 from .graph_service import get_graph_context
 
 def generate_response(question: str, context: str) -> str:
-    gemini_key = os.getenv("GEMINI_API_KEY")
-    if not gemini_key:
-        return "Error: GEMINI_API_KEY is not set."
+    groq_key = os.getenv("GROQ_API_KEY")
+    groq_model = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+    
+    if not groq_key:
+        return "Error: GROQ_API_KEY is not set."
 
-    client = genai.Client(api_key=gemini_key)
+    client = Groq(api_key=groq_key)
     
     graph_context = get_graph_context()
     
@@ -19,13 +21,22 @@ def generate_response(question: str, context: str) -> str:
         "If you cannot answer the question based on the context, say that you don't know."
     )
     
-    user_prompt = f"System Instruction: {system_prompt}\n\nDocument Context:\n{context}\n\nQuestion:\n{question}"
+    user_prompt = f"Document Context:\n{context}\n\nQuestion:\n{question}"
 
     try:
-        response = client.models.generate_content(
-            model='models/gemini-2.5-flash',
-            contents=user_prompt
+        response = client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_prompt,
+                },
+                {
+                    "role": "user",
+                    "content": user_prompt,
+                }
+            ],
+            model=groq_model,
         )
-        return response.text
+        return response.choices[0].message.content
     except Exception as e:
-        return f"Error communicating with Gemini: {str(e)}"
+        return f"Error communicating with Groq: {str(e)}"

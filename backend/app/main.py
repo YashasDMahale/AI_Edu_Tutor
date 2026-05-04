@@ -3,6 +3,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 import os
 import shutil
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from .services.db_service import PineconeService
 from .services.embedding_service import EmbeddingService
@@ -52,9 +55,9 @@ async def upload_file(file: UploadFile = File(...), file_type: str = Form(...)):
     
     try:
         if file_type == "pdf":
-            doc = fitz.open(file_path)
-            for page in doc:
-                extracted_text += page.get_text()
+            with fitz.open(file_path) as doc:
+                for page in doc:
+                    extracted_text += page.get_text()
             # Simple chunking
             chunk_size = 1000
             chunks = [extracted_text[i:i+chunk_size] for i in range(0, len(extracted_text), chunk_size)]
@@ -71,13 +74,19 @@ async def upload_file(file: UploadFile = File(...), file_type: str = Form(...)):
             
         elif file_type in ["image", "audio"]:
             extracted_text = extract_text_from_media(file_path, file_type)
+            if not extracted_text:
+                extracted_text = ""
             
-            # Simple chunking for media text
-            chunk_size = 1000
+            # Larger chunking for media text to keep transcriptions together
+            chunk_size = 5000
             chunks = [extracted_text[i:i+chunk_size] for i in range(0, len(extracted_text), chunk_size)]
             
             for i, chunk in enumerate(chunks):
-                emb = embedding_service.get_text_embedding(chunk)
+                if file_type == "image":
+                    emb = embedding_service.get_image_embedding(chunk)
+                else: # audio
+                    emb = embedding_service.get_audio_embedding(chunk)
+                    
                 pinecone_service.upsert(
                     f"{file.filename}-chunk-{i}",
                     emb,
@@ -86,12 +95,19 @@ async def upload_file(file: UploadFile = File(...), file_type: str = Form(...)):
             
             extract_entities_and_update_graph(extracted_text)
 
-        os.remove(file_path)
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
         return {"message": "File processed successfully", "file_name": file.filename, "modality": file_type}
 
     except Exception as e:
         if os.path.exists(file_path):
-            os.remove(file_path)
+            try:
+                os.remove(file_path)
+            except OSError:
+                pass
         raise HTTPException(status_code=500, detail=str(e))
 
 from pydantic import BaseModel
@@ -111,7 +127,9 @@ async def query_system(req: QueryRequest):
     for match in matches:
         metadata = match.get('metadata', {})
         text = metadata.get('text', '')
-        context += text + "\n---\n"
+        file_name = metadata.get('file_name', 'Unknown File')
+        source_type = metadata.get('source_type', 'unknown')
+        context += f"SOURCE: {file_name} ({source_type})\nCONTENT: {text}\n---\n"
         sources.append({
             "source_type": metadata.get('source_type'),
             "file_name": metadata.get('file_name'),

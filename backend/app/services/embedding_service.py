@@ -21,6 +21,16 @@ class EmbeddingService:
         )
         return embeddings[0].values
 
-    def get_image_embedding(self, image_path: str):
-        # Image embeddings are disabled when using Pinecone text Inference API to keep the container lightweight
-        raise NotImplementedError("Image embeddings are disabled in this lightweight setup.")
+    def get_image_embedding(self, description: str):
+        """
+        Generates a semantic embedding for an image using Gemini's rich visual description.
+        In production CLIP setup: return CLIP_model.encode(image)
+        """
+        return self.get_text_embedding(f"[VISUAL] {description}")
+
+    def get_audio_embedding(self, transcription: str):
+        """
+        Generates a semantic embedding for audio using transcription.
+        In production: return CLAP_model.encode(audio)
+        """
+        return self.get_text_embedding(f"[AUDIO] {transcription}")

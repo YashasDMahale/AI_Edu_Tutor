@@ -11,11 +11,9 @@ def extract_text_from_media(file_path: str, file_type: str) -> str:
     # Map basic file_type to MIME type for Gemini
     mime_type = "application/octet-stream"
     if file_type == "image":
-        # Let the SDK infer or assume jpeg if it's generic 'image'
-        # But we upload the file directly so the SDK can infer from extension if present
-        prompt = "Extract all readable text from this image accurately. Include all visible text. Do not add any extra commentary."
+        prompt = "Describe this image in detail and extract all visible text. If it is a document, transcribe it accurately. If it is a photo, describe the scene, objects, and any people present."
     elif file_type == "audio":
-        prompt = "Provide a highly accurate transcription of this audio. Do not add any extra commentary."
+        prompt = "Provide a complete, word-for-word, highly accurate transcription of this audio. If there is no speech, describe the sounds, music, or mood of the audio in detail."
     else:
         raise ValueError(f"Unsupported media type for extraction: {file_type}")
 
@@ -25,7 +23,7 @@ def extract_text_from_media(file_path: str, file_type: str) -> str:
     
     # Wait until the file is ACTIVE (processed)
     import time
-    for _ in range(20):
+    for _ in range(60): # Increase wait to 120 seconds for larger files
         if str(uploaded_file.state).endswith('ACTIVE'):
             break
         time.sleep(2)
